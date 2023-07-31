@@ -11,12 +11,11 @@ import BigNumber from "bignumber.js";
 import { useState } from "react";
 import QRCode from "react-qr-code";
 
-// get a free Helius RPC at helius.dev
-const HeliusRPC = "<HELIUS_RPC>";
-
  // Connecting to devnet for this example
  console.log('Connecting to the Solana network\n');
- const connection = new Connection(HeliusRPC, 'confirmed');
+ // get a free Helius RPC at helius.dev
+ const RPC="https://rpc.helius.xyz/?api-key<Helius_API>"!
+ const connection = new Connection(RPC, 'confirmed');
 
 export default function Home() {
   // URL Variables
@@ -35,8 +34,8 @@ export default function Home() {
   const [paymentStatus, setPaymentStatus] = useState<string>('');
 
   async function createPayment() {
-    setRecipient(new PublicKey(address));
     console.log("Creating a payment URL \n");
+    setRecipient(new PublicKey(address));
     const url = encodeURL({
       recipient,
       amount,
@@ -51,7 +50,7 @@ export default function Home() {
   }
 
   async function checkPayment() {
-    // Update payment status
+    // update payment status
     setPaymentStatus('pending'); 
     
     console.log('Searching for the payment\n');
@@ -79,7 +78,7 @@ export default function Home() {
     // Update payment status
     setPaymentStatus('confirmed');
 
-    //validate the payment
+    //validate transaction
     console.log('Validating the payment\n');
     try {
       await validateTransfer(connection, signature, { recipient: recipient, amount });
