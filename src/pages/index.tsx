@@ -1,118 +1,142 @@
-import Image from 'next/image'
-import { Inter } from 'next/font/google'
+// imports
+import {
+  Cluster,
+  clusterApiUrl,
+  Connection,
+  PublicKey,
+  Keypair,
+} from "@solana/web3.js";
+import { encodeURL, createQR,findReference, FindReferenceError, validateTransfer } from "@solana/pay";
+import BigNumber from "bignumber.js";
+import { useState } from "react";
+import QRCode from "react-qr-code";
 
-const inter = Inter({ subsets: ['latin'] })
+// get a free Helius RPC at helius.dev
+const HeliusRPC = "<HELIUS_RPC>";
+
+ // Connecting to devnet for this example
+ console.log('Connecting to the Solana network\n');
+ const connection = new Connection(HeliusRPC, 'confirmed');
 
 export default function Home() {
+  // URL Variables
+  const [address, setAddress] = useState<string>("");
+  const [recipient, setRecipient] = useState<PublicKey>(
+    new PublicKey("CckxW6C1CjsxYcXSiDbk7NYfPLhfqAm3kSB5LEZunnSE")
+  );
+  const [amount, setAmount] = useState<BigNumber>(new BigNumber(1));
+  const [message, setMessage] = useState<string>("Helius Demo Order");
+  const reference = new Keypair().publicKey;
+  const label = "Helius Super Store";
+  const memo = "Helius#4098";
+
+  // for the QR code
+  const [qrCodeValue, setQrCodeValue] = useState<string>('');
+  const [paymentStatus, setPaymentStatus] = useState<string>('');
+
+  async function createPayment() {
+    setRecipient(new PublicKey(address));
+    console.log("Creating a payment URL \n");
+    const url = encodeURL({
+      recipient,
+      amount,
+      reference,
+      label,
+      message,
+      memo,
+    });
+
+    setQrCodeValue(url.toString()); // convert URL object to string
+    checkPayment();
+  }
+
+  async function checkPayment() {
+    // Update payment status
+    setPaymentStatus('pending'); 
+    
+    console.log('Searching for the payment\n');
+    let signatureInfo;
+   
+    const {signature} = await new Promise((resolve, reject) => {
+       
+        const interval = setInterval(async () => {
+            console.count('Checking for transaction...'+reference);
+            try {
+                signatureInfo = await findReference(connection, reference, { finality: 'confirmed' });
+                console.log('\n Signature: ', signatureInfo.signature,signatureInfo);
+                clearInterval(interval);
+                resolve(signatureInfo);
+            } catch (error: any) {
+                if (!(error instanceof FindReferenceError)) {
+                    console.error(error);
+                    clearInterval(interval);
+                    reject(error);
+                }
+            }
+        }, 250);
+    });
+
+    // Update payment status
+    setPaymentStatus('confirmed');
+
+    //validate the payment
+    console.log('Validating the payment\n');
+    try {
+      await validateTransfer(connection, signature, { recipient: recipient, amount });
+
+      // Update payment status
+      setPaymentStatus('validated');
+      console.log('Payment validated');
+      return true;
+      
+  } catch (error) {
+      console.error('Payment failed', error);
+      return false;
+  }
+  }
+
   return (
-    <main
-      className={`flex min-h-screen flex-col items-center justify-between p-24 ${inter.className}`}
-    >
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/pages/index.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <h1 className="mb-6 text-3xl font-bold text-orange-700">
+        Helius Solana Pay Demo
+      </h1>
+      <div className="w-full max-w-md p-6 mx-auto bg-white rounded-xl shadow-md">
+        <div className="mb-4">
+          <label className="block mb-2 text-sm font-medium text-gray-700">
+            Address:
+          </label>
+          <input
+            type="text"
+            onChange={(e) => setAddress(e.target.value)}
+            className="w-full px-3 py-2 text-sm leading-tight text-gray-700 border rounded shadow appearance-none focus:outline-none focus:shadow-outline"
+          />
         </div>
+        <div className="mb-4">
+          <label className="block mb-2 text-sm font-medium text-gray-700">
+            Amount:
+          </label>
+          <input
+            type="number"
+            onChange={(e) => setAmount(new BigNumber(e.target.value))}
+            className="w-full px-3 py-2 text-sm leading-tight text-gray-700 border rounded shadow appearance-none focus:outline-none focus:shadow-outline"
+          />
+        </div>
+        <div className="flex justify-center items-center">
+        <button 
+          className="px-4 py-2 font-bold text-white bg-blue-500 rounded hover:bg-blue-700" 
+          onClick={createPayment}
+        >
+          Create QR Code
+        </button>
+        </div>
+        
+        <div>
+        {paymentStatus === 'validated' ? <p className="mt-4 text-green-500 text-center">Payment Validated</p> : <div className="flex justify-center mt-4">
+          {qrCodeValue && <QRCode value={qrCodeValue} />}
+        </div>}
       </div>
-
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700/10 after:dark:from-sky-900 after:dark:via-[#0141ff]/40 before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
       </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Discover and deploy boilerplate example Next.js&nbsp;projects.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+      
+    </div>
+  );
 }
